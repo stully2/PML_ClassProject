@@ -1,0 +1,100 @@
+---
+title: "Coursera: Practical Machine Learning Student Project"
+author: "stully"
+date: "January 31, 2016"
+output: html_document
+---
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+## Preparation
+
+#### 1: System Setup
+First the necessary r packages will be loaded and seed set for reproducibility. Please note that specific version of the below packages have been used so results may vary.
+
+```{r, warning=FALSE,error=FALSE}
+require(randomForest);require(rpart);require(rpart.plot);require(rattle);require(caret)
+
+set.seed(8675309)
+```
+```{r, warning=FALSE,error=FALSE}
+sessionInfo()
+```
+
+#### 2: Download Data
+```{r, warning=FALSE,error=FALSE}
+d01_training <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+d02_testing <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+```
+
+#### 3: Data Cleanup
+Much of the data provided includes objects that have high levels of non representation (NAs or blanks). These will be eliminated with various time stamp, user information, and line item data.
+
+```{r, warning=FALSE,error=FALSE}
+# Set Repressor as a factor variable
+d01_training$classe <- as.factor(d01_training$classe)
+
+# Eliminate any possible predictor that has no values attributed
+nameskeep <- names(d01_training)[sapply(d01_training, function (x) any(is.na(x) | x == ""))!=TRUE]
+
+# Remove time stamps, user_name, line item etc
+nameskeep <- nameskeep[-c(1:7)]
+d01_trainingB <- d01_training[,nameskeep]
+```
+
+## Cross Validation
+The training set will be partitioned into a usable training and testing set so that the models can be fit and checked without utilizing the final prediction dataset.
+
+```{r, warning=FALSE,error=FALSE}
+x <- createDataPartition(y = d01_trainingB$classe, p = 0.7, list=FALSE)
+x1 <- d01_trainingB[x,]
+x2 <- d01_trainingB[-x,]
+```
+
+#### Basic rpart
+
+```{r, warning=FALSE,error=FALSE}
+modFit_rp <- train(classe ~ .,data = x1, method = 'rpart')
+modPred_rp <- predict(modFit_rp, newdata=x2)
+rpcm <- confusionMatrix(modPred_rp, x2$classe)
+rpcm$overall
+rpcm$table
+```
+
+You can see that the confusion matrix reports an out of sample accuracy of `r rpcm$overall[1]` which indicates the reciprocal out of sample error of `r 1-rpcm$overall[1]`.
+
+#### Random Forest
+
+In an effort to improve accuracy a random forest prediction will be created to make use of the inherent more detailed cross validation in the procedure.
+
+```{r}
+modFit_rf <- randomForest(classe ~. , data=x1)
+modPred_rf <- predict(modFit_rf, newdata=x2)
+rfcm <- confusionMatrix(modPred_rf, x2$classe)
+rfcm$overall
+rfcm$table
+```
+
+As can be seen in the confusion matrix, the out of sample error is much smaller at `r 1-rfcm$overall[1]`.
+
+## Results
+
+Now that the regression model has been optimized it can be used to predict which classe factor each of the original 20 test samples would result in.
+
+```{r}
+predict(modFit_rf,newdata = d02_testing)
+```
